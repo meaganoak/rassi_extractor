@@ -1,32 +1,39 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 
 import argparse
 import os
 import re
 import numpy as np
 
-parser = argparse.ArgumentParser(
-    description='Extract state energies and intensities')
-parser.add_argument("file",
-                    help='OpenMolcas .out file containing RASSI intensities')
-parser.add_argument('-n', '--nanometers',
-                    help='Calculate in nanometers, default is wavenumbers',
-                    action='store_true')
-args = parser.parse_args()  # Parse command line arguments
-
+# Set up argument parser
+parser = argparse.ArgumentParser(description='Extract state energies and intensities')
+parser.add_argument("file", help='OpenMolcas .out file containing RASSI intensities')
+parser.add_argument('-n', '--nanometers', help='Calculate in nanometers, default is wavenumbers', action='store_true')
+parser.add_argument('-t', '--types', nargs='+', choices=['velocity', 'length', 'total', 'dipole', 'complex'], default=['dipole'],
+                    help='Specify the transition types to parse. Options: velocity, length, total, dipole, and complex. Default is dipole.')
+args = parser.parse_args()
 
 # Define output file name based on the input file name
-output = 'Extracted_{}_Data.txt'.format(os.path.splitext(str(args.file))[0])
+output = f'Extracted_{os.path.splitext(str(args.file))[0]}_Data.txt'
 
-#Initialize variables
+# Transition type map for parsing
+transition_type_map = {
+    'velocity': '++ Velocity transition strengths (SO states):',
+    'length': '++ Length and velocity gauge comparison (SO states):',
+    'total': '++ Total transition strengths for the second-order expansion of the wave vector (SO states):',
+    'dipole': '++ Dipole transition strengths (SO states):',
+    'complex': '++ Complex transition dipole vectors (SO states):'
+}
+
+# Initialize variables
 rassi_start = False
-rassi_energies = []  # List to store energies
+rassi_energies = []
 parsing = False
-intensities = []  # List to store intensities
-energy_diff = []  # List to store energy differences
-dict1 = {}  # Dictionary to store intensities
-dict2 = {}  # Dictionary to store energy differences
-Data = []  # List to store final data
+intensities = []
+energy_diff = []
+dict1 = {}
+dict2 = {}
+Data = []
 
 # Open the specified file for reading
 with open(args.file) as f:
@@ -38,163 +45,121 @@ with open(args.file) as f:
             rassi_start = True
             line = line.split(maxsplit=5)
             line = line[-1]
-            date = ' '.join(line.split(' ')[:-1])  # Extract date
+            date = ' '.join(line.split(' ')[:-1])
 
         # If we are inside the RASSI section
         if rassi_start:
-            states = [x for x in range(1, len(rassi_energies) + 1)]  # Create state list
-            # Extract state energies from the relevant line
+            states = [x for x in range(1, len(rassi_energies) + 1)]
+            
+            # Extract state energies
             if 'SO-RASSI' in line and 'Total energy' in line:
-                line = " ".join(line.split()).replace('::', '')  # Clean up line
-                line = line.split(':')[-1].strip()  # Get energy value
-                rassi_energies.append(line)  # Append energy to the list
+                line = " ".join(line.split()).replace('::', '')
+                line = line.split(':')[-1].strip()
+                rassi_energies.append(line)
 
-#print("Final RASSI energies:", rassi_energies)
-
-            # Identify the start of the intensity data section
-            if '++ Velocity transition strengths (SO states)' in line:
+            # Identify the start of the intensity data section for the selected types
+            if any(transition_type_map[t] in line for t in args.types):
                 parsing = True
 
             # Process intensity data
             if parsing:
-                line = line.replace('below threshold', '0.00000000E-00')  # Replace threshold indicator
-                line = " ".join(line.split()) + '\n'  # Clean up line
-                intensities.append(line)  # Append line to intensities list
+                line = line.replace('below threshold', '0.00000000E-00')
+                line = " ".join(line.split()) + '\n'
+                intensities.append(line)
 
-                # Check if we have reached the next "++" string (marking the end of the section)
-                if '++ Length' in line:  # Check if "++" is encountered
-                    parsing = False  # End parsing when we reach the second "++"
+                # Check for end of the section
+                if '++' in line and not any(transition_type_map[t] in line for t in args.types):
+                    parsing = False
 
 
+# Process intensities if any have been added
+if intensities:
+    intensities = [item for item in intensities if item.strip() != '']
+    intensities = [item for item in intensities if "++" not in item]
+    intensities = [item for item in intensities if "--" not in item and "for osc." not in item and "Einstein" not in item and "Re" not in item]
 
-#Process intensities if any have been added
-                if intensities:
-                    intensities = [item for item in intensities if item.strip() != '']  # Remove empty lines
-                    intensities = [item for item in intensities if "++" not in item]  # Remove the "++" markers
-                    intensities = [item for item in intensities if "--" not in item and "for osc." not in item and "Einstein" not in item]  # Filter out unwanted lines
-
-# Print the final RASSI intensities after processing the whole file
-#print("Final RASSI intensities:", intensities)
-
-    # Read intensity data into a numpy array
+# Read intensity data into a numpy array
+if 'complex' in args.types:
     int_arr = np.genfromtxt(
         intensities,
         dtype=None,
         delimiter=' ',
-        usecols=(0, 1, 2)  # Extract specific columns
+        usecols=(0, 1, 2, 3, 4, 5, 6, 7),  
     )
+    int_arr = np.column_stack([int_arr['f0'], int_arr['f1'], int_arr['f2'], int_arr['f3'], int_arr['f4'], int_arr['f5'], int_arr['f6'], int_arr['f7']])
 
-    # Stack the columns into a single array for easier processing
-    int_arr = np.column_stack([int_arr['f0'],
-                               int_arr['f1'],
-                               int_arr['f2']])
+else:
+    int_arr = np.genfromtxt(
+        intensities,
+        dtype=None,
+        delimiter=' ',
+        usecols=(0, 1, 2)
+    )
+    int_arr = np.column_stack([int_arr['f0'], int_arr['f1'], int_arr['f2']])
 
+# Create a dictionary for the extracted energies
+rassi_E_dict = {state: energy for state, energy in zip(states, rassi_energies)}
 
-                # Create a dictionary for the extracted energies
-    rassi_E_dict = {
-        state: energy
-        for state, energy
-        in zip(states, rassi_energies)
-    }
+# Calculate energy differences
+units = 'nm' if args.nanometers else 'cm-1'
+conversion_factor = 1 if args.nanometers else 10000000
 
-                # Calculate differences in energy
-    if args.nanometers:
-        units = 'nm'
-        if len(rassi_energies) != 0:
-            key_list = [key for key in rassi_E_dict]
-            ground_state = int(key_list[0])
-            for x in rassi_E_dict:
-                for y in rassi_E_dict:
-                    Difference = (
-                        float(rassi_E_dict[y])
-                        - float(rassi_E_dict[x])
-                    )
+if len(rassi_energies) != 0:
+    key_list = list(rassi_E_dict)
+    for x in rassi_E_dict:
+        for y in rassi_E_dict:
+            Difference = (float(rassi_E_dict[y]) - float(rassi_E_dict[x]))
+            if int(x) < int(y) and int(x) < 10:
+                wndiff = ((4.3597482E-18 * Difference / (6.62607015E-34 * 299792458)) / 100)
+                nmdiff = (1 / wndiff) * conversion_factor if wndiff != 0 else 0
+                energy_diff.append(f"{x} to {y}:{format(nmdiff, '.8f')}")
 
-                    if int(x) < int(y) and int(x) < 10:
-                        wndiff = (
-                            (4.3597482E-18 * Difference
-                             / (6.62607015E-34 * 299792458))
-                            / 100
-                        )
+# Populate dictionaries with extracted data
 
-                        if wndiff == 0:
-                            nmdiff = 0
-                        else:
-                            nmdiff = (1 / wndiff) * 10000000
-                        energy_diff.append(
-                            str(x)
-                            + ' to '
-                            + str(y)
-                            + ':'
-                            + str(format(nmdiff, '.8f'))
-                        )
+for x in range(np.shape(int_arr)[0]):
+    key = f"{int(int_arr[x, 0])} to {int(int_arr[x, 1])}"
+    dict1[key] = float(int_arr[x, 2])
 
-    else:
-        units = 'cm-1'
-        if len(rassi_energies) != 0:
-            key_list = [key for key in rassi_E_dict]
-            ground_state = int(key_list[0])
-            for x in rassi_E_dict:
-                for y in rassi_E_dict:
-                    Difference = (
-                        float(rassi_E_dict[y])
-                        - float(rassi_E_dict[x])
-                    )
+for line in energy_diff:
+    key, value = line.split(':')
+    dict2[key] = float(value)
 
-                    if int(x) < int(y) and int(x) < 10:
-                        wndiff = (
-                            (4.3597482E-18 * Difference
-                             / (6.62607015E-34 * 299792458))
-                            / 100
-                        )
+# Prepare data for output
+if 'complex' in args.types:
+    for row in int_arr:
+        from_state, to_state, real_dx, imag_dx, real_dy, imag_dy, real_dz, imag_dz = row
+        
+        # Retrieve the energy difference from dict2
+        energy_diff_value = dict2.get(f'{int(from_state)} to {int(to_state)}', 0)
 
-                        energy_diff.append(
-                            str(x)
-                            + ' to '
-                            + str(y)
-                            + ':'
-                            + str(format(wndiff, '.8f'))
-                        )
-
-            # Check for any missing data and update section status
-            if (len(rassi_energies) == 0 or len(intensities) == 0):
-                rassi_sections.update({date: 'failed'})
-            else:
-                # Populate dictionaries with extracted data
-                for x in range(np.shape(int_arr)[0]):
-                    key = (
-                        str(int(int_arr[x, 0]))
-                        + ' to '
-                        + str(int(int_arr[x, 1]))
-                    )
-
-                    value = int_arr[x, 2]  # Extract intensity value
-                    dict1[key] = float(value)  # Store intensity
-
-                for line in energy_diff:
-                    key, value = line.split(':')
-                    dict2[key] = float(value)  # Store energy difference
-
-                # Prepare data for output
-                for key, value in dict1.items():
-                    if key in dict1 and key in dict2:
-                        from_state, to_state = key.split(' to ')
-                        Data.append(
-                            from_state
-                            + '      '
-                            + to_state
-                            + '      '
-                            + str(dict2[key])
-                            + '      '
-                            + str(dict1[key])
-                            + '     '
-                            )
+        # Append formatted data
+        Data.append(
+            f"{int(from_state):<10} {int(to_state):<10} {energy_diff_value:<15.8f} "
+            f"{real_dx:<15.8f} {imag_dx:<15.8f} "
+            f"{real_dy:<15.8f} {imag_dy:<15.8f} "
+            f"{real_dz:<15.8f} {imag_dz:<15.8f}"
+        )
+else:
+    for key, value in dict1.items():
+        if key in dict1 and key in dict2:
+            from_state, to_state = key.split(' to ')
+            Data.append(
+                f"{from_state:<10} {to_state:<10} {dict2[key]:<15.8f} {value:<15.8f}"
+            )
 
 # Write the final Data list to the output file
 with open(output, 'w') as f_out:
-    f_out.write("Initial State   Final State      Energy (" + units + ")   Oscillator Strength\n")
-#    f_out.write("Energy (" + units + ")   Oscillator Strength\n")
+    if 'complex' in args.types: 
+        f_out.write(
+            f"{'Initial':<10} {'Final':<10} {'Energy (' + units + ')':<20} "
+            f"{'Real_dx':<15} {'Imag_dx':<15} {'Real_dy':<15} {'Imag_dy':<15} {'Real_dz':<15} {'Imag_dz':<15}\n"
+        )
+    else:
+        f_out.write(
+            f"{'Initial':<10} {'Final':<10} {'Energy (' + units + ')':<20} {'Oscillator Strength':<20}\n"
+        )
     for item in Data:
-        f_out.write(item + '\n')  # Write each entry followed by a newline
+        f_out.write(item + '\n')
 
 print(f"Data has been written to {output}")
+
