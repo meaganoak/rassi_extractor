@@ -5,7 +5,6 @@ import os
 import re
 import numpy as np
 
-# Set up argument parser
 parser = argparse.ArgumentParser(description='Extract state energies and intensities')
 parser.add_argument("file", help='OpenMolcas .out file containing RASSI intensities')
 parser.add_argument('-n', '--nanometers', help='Calculate in nanometers, default is wavenumbers', action='store_true')
@@ -13,10 +12,8 @@ parser.add_argument('-t', '--types', nargs='+', choices=['velocity', 'length', '
                     help='Specify the transition types to parse. Options: velocity, length, total, dipole, and complex. Default is dipole.')
 args = parser.parse_args()
 
-# Define output file name based on the input file name
 output = f'Extracted_{os.path.splitext(str(args.file))[0]}_Data.txt'
 
-# Transition type map for parsing
 transition_type_map = {
     'velocity': '++ Velocity transition strengths (SO states):',
     'length': '++ Length and velocity gauge comparison (SO states):',
@@ -25,7 +22,6 @@ transition_type_map = {
     'complex': '++ Complex transition dipole vectors (SO states):'
 }
 
-# Initialize variables
 rassi_start = False
 rassi_energies = []
 parsing = False
@@ -35,7 +31,6 @@ dict1 = {}
 dict2 = {}
 Data = []
 
-# Open the specified file for reading
 with open(args.file) as f:
     for line in f:
         # Check if the RASSI module is present
@@ -57,7 +52,7 @@ with open(args.file) as f:
                 line = line.split(':')[-1].strip()
                 rassi_energies.append(line)
 
-            # Identify the start of the intensity data section for the selected types
+            # Identify the start of the intensity data section for the transition type
             if any(transition_type_map[t] in line for t in args.types):
                 parsing = True
 
@@ -72,7 +67,7 @@ with open(args.file) as f:
                     parsing = False
 
 
-# Process intensities if any have been added
+# Clean up 
 if intensities:
     intensities = [item for item in intensities if item.strip() != '']
     intensities = [item for item in intensities if "++" not in item]
@@ -97,7 +92,6 @@ else:
     )
     int_arr = np.column_stack([int_arr['f0'], int_arr['f1'], int_arr['f2']])
 
-# Create a dictionary for the extracted energies
 rassi_E_dict = {state: energy for state, energy in zip(states, rassi_energies)}
 
 # Calculate energy differences
@@ -115,7 +109,6 @@ if len(rassi_energies) != 0:
                 energy_diff.append(f"{x} to {y}:{format(nmdiff, '.8f')}")
 
 # Populate dictionaries with extracted data
-
 for x in range(np.shape(int_arr)[0]):
     key = f"{int(int_arr[x, 0])} to {int(int_arr[x, 1])}"
     dict1[key] = float(int_arr[x, 2])
@@ -124,7 +117,7 @@ for line in energy_diff:
     key, value = line.split(':')
     dict2[key] = float(value)
 
-# Prepare data for output
+# Prepare data
 if 'complex' in args.types:
     for row in int_arr:
         from_state, to_state, real_dx, imag_dx, real_dy, imag_dy, real_dz, imag_dz = row
@@ -147,7 +140,7 @@ else:
                 f"{from_state:<10} {to_state:<10} {dict2[key]:<15.8f} {value:<15.8f}"
             )
 
-# Write the final Data list to the output file
+# Write to the output file
 with open(output, 'w') as f_out:
     if 'complex' in args.types: 
         f_out.write(
