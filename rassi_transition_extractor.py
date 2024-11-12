@@ -62,7 +62,7 @@ with open(args.file) as f:
                 intensities.append(line)  # Append line to intensities list
 
                 # Check if we have reached the next "++" string (marking the end of the section)
-                if '++ Length and velocity gauge comparison (SO states)' in line:  # Check if "++" is encountered
+                if '++ Length' in line:  # Check if "++" is encountered
                     parsing = False  # End parsing when we reach the second "++"
 
 
@@ -81,14 +81,14 @@ with open(args.file) as f:
         intensities,
         dtype=None,
         delimiter=' ',
-        usecols=(0, 1, 4)  # Extract specific columns
+        usecols=(0, 1, 2)  # Extract specific columns
     )
 
     # Stack the columns into a single array for easier processing
     int_arr = np.column_stack([int_arr['f0'],
                                int_arr['f1'],
                                int_arr['f2']])
-            
+
 
                 # Create a dictionary for the extracted energies
     rassi_E_dict = {
@@ -178,8 +178,13 @@ with open(args.file) as f:
                 # Prepare data for output
                 for key, value in dict1.items():
                     if key in dict1 and key in dict2:
+                        from_state, to_state = key.split(' to ')
                         Data.append(
-                            str(dict2[key])
+                            from_state
+                            + '      '
+                            + to_state
+                            + '      '
+                            + str(dict2[key])
                             + '      '
                             + str(dict1[key])
                             + '     '
@@ -187,8 +192,8 @@ with open(args.file) as f:
 
 # Write the final Data list to the output file
 with open(output, 'w') as f_out:
-#    f_out.write("Fr State  To State  Energy (" + units + ")   Oscillator Strength\n")
-    f_out.write("Energy (" + units + ")   Oscillator Strength\n")
+    f_out.write("Initial State   Final State      Energy (" + units + ")   Oscillator Strength\n")
+#    f_out.write("Energy (" + units + ")   Oscillator Strength\n")
     for item in Data:
         f_out.write(item + '\n')  # Write each entry followed by a newline
 
