@@ -12,7 +12,8 @@ parser.add_argument('-t', '--types', nargs='+', choices=['velocity', 'length', '
                     help='Specify the transition types to parse. Options: velocity, length, total, dipole, and complex. Default is dipole.')
 args = parser.parse_args()
 
-output = f'Extracted_{os.path.splitext(str(args.file))[0]}_Data.txt'
+output_types = "_".join(args.types)  # Join selected types with underscores
+output = f'Extracted_{os.path.splitext(os.path.basename(args.file))[0]}_{output_types}_Data.txt'
 
 transition_type_map = {
     'velocity': '++ Velocity transition strengths (SO states):',
