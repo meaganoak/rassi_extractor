@@ -7,7 +7,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Extract state energies and intensities')
 parser.add_argument("file", help='OpenMolcas .out file containing RASSI intensities')
-parser.add_argument('-n', '--nanometers', help='Calculate in nanometers, default is wavenumbers', action='store_true')
+parser.add_argument('-u', '--units', help='Calculate in nanometers, wavenumber, or eV. Default is eV', default='eV')
 parser.add_argument('-t', '--types', nargs='+', choices=['velocity', 'length', 'total', 'dipole', 'complex'], default=['dipole'],
                     help='Specify the transition types to parse. Options: velocity, length, total, dipole, and complex. Default is dipole.')
 args = parser.parse_args()
@@ -96,8 +96,6 @@ else:
 rassi_E_dict = {state: energy for state, energy in zip(states, rassi_energies)}
 
 # Calculate energy differences
-units = 'nm' if args.nanometers else 'cm-1'
-conversion_factor = 1 if args.nanometers else 10000000
 
 if len(rassi_energies) != 0:
     key_list = list(rassi_E_dict)
@@ -105,10 +103,17 @@ if len(rassi_energies) != 0:
         for y in rassi_E_dict:
             Difference = (float(rassi_E_dict[y]) - float(rassi_E_dict[x]))
             if int(x) < int(y) and int(x) < 10:
-                wndiff = ((4.3597482E-18 * Difference / (6.62607015E-34 * 299792458)) / 100)
-                nmdiff = (1 / wndiff) * conversion_factor if wndiff != 0 else 0
-                evdiff = Difference * 27.211324570273
-                energy_diff.append(f"{x} to {y}:{format(evdiff, '.8f')}")
+                if args.units == 'eV':
+                    energy_diff_value = Difference * 27.211324570273
+                elif args.units == 'wavenumbers':
+                    energy_diff_value = ((4.3597482E-18 * Difference / (6.62607015E-34 * 299792458)) / 100)
+                elif args.units == 'nanometers':
+                    energy_diff_value = 1 / ((4.3597482E-18 * Difference / (6.62607015E-34 * 299792458)) / 100)  
+                
+                energy_diff.append(f"{x} to {y}:{format(energy_diff_value, '.8f')}")
+
+
+
 
 # Populate dictionaries with extracted data
 for x in range(np.shape(int_arr)[0]):
@@ -146,12 +151,12 @@ else:
 with open(output, 'w') as f_out:
     if 'complex' in args.types:
         f_out.write(
-            f"{'Initial':<10} {'Final':<10} {'Energy (' + units + ')':<20} "
+            f"{'Initial':<10} {'Final':<10} {'Energy (' + args.units + ')':<20} "
             f"{'Real_dx':<15} {'Imag_dx':<15} {'Real_dy':<15} {'Imag_dy':<15} {'Real_dz':<15} {'Imag_dz':<15}\n"
         )
     else:
         f_out.write(
-            f"{'Initial':<10} {'Final':<10} {'Energy (' + units + ')':<20} {'Oscillator Strength':<20}\n"
+            f"{'Initial':<10} {'Final':<10} {'Energy (' + args.units + ')':<20} {'Oscillator Strength':<20}\n"
         )
     for item in Data:
         f_out.write(item + '\n')
