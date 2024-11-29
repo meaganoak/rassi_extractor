@@ -46,7 +46,7 @@ with open(args.file) as f:
         # If we are inside the RASSI section
         if rassi_start:
             states = [x for x in range(1, len(rassi_energies) + 1)]
-            
+
             # Extract state energies
             if 'SO-RASSI' in line and 'Total energy' in line:
                 line = " ".join(line.split()).replace('::', '')
@@ -68,7 +68,7 @@ with open(args.file) as f:
                     parsing = False
 
 
-# Clean up 
+# Clean up
 if intensities:
     intensities = [item for item in intensities if item.strip() != '']
     intensities = [item for item in intensities if "++" not in item]
@@ -80,7 +80,7 @@ if 'complex' in args.types:
         intensities,
         dtype=None,
         delimiter=' ',
-        usecols=(0, 1, 2, 3, 4, 5, 6, 7),  
+        usecols=(0, 1, 2, 3, 4, 5, 6, 7),
     )
     int_arr = np.column_stack([int_arr['f0'], int_arr['f1'], int_arr['f2'], int_arr['f3'], int_arr['f4'], int_arr['f5'], int_arr['f6'], int_arr['f7']])
 
@@ -107,7 +107,8 @@ if len(rassi_energies) != 0:
             if int(x) < int(y) and int(x) < 10:
                 wndiff = ((4.3597482E-18 * Difference / (6.62607015E-34 * 299792458)) / 100)
                 nmdiff = (1 / wndiff) * conversion_factor if wndiff != 0 else 0
-                energy_diff.append(f"{x} to {y}:{format(nmdiff, '.8f')}")
+                evdiff = Difference * 27.211324570273
+                energy_diff.append(f"{x} to {y}:{format(evdiff, '.8f')}")
 
 # Populate dictionaries with extracted data
 for x in range(np.shape(int_arr)[0]):
@@ -122,7 +123,7 @@ for line in energy_diff:
 if 'complex' in args.types:
     for row in int_arr:
         from_state, to_state, real_dx, imag_dx, real_dy, imag_dy, real_dz, imag_dz = row
-        
+
         # Retrieve the energy difference from dict2
         energy_diff_value = dict2.get(f'{int(from_state)} to {int(to_state)}', 0)
 
@@ -143,7 +144,7 @@ else:
 
 # Write to the output file
 with open(output, 'w') as f_out:
-    if 'complex' in args.types: 
+    if 'complex' in args.types:
         f_out.write(
             f"{'Initial':<10} {'Final':<10} {'Energy (' + units + ')':<20} "
             f"{'Real_dx':<15} {'Imag_dx':<15} {'Real_dy':<15} {'Imag_dy':<15} {'Real_dz':<15} {'Imag_dz':<15}\n"
@@ -156,4 +157,3 @@ with open(output, 'w') as f_out:
         f_out.write(item + '\n')
 
 print(f"Data has been written to {output}")
-
