@@ -7,21 +7,43 @@ def extract_energy_data_from_output(output_file):
     with open(output_file, 'r') as file:
         capture_energy = False
         for line in file:
+            # Start of SO energy table
             if re.match(r"^\s*SO\s+State", line):
                 capture_energy = True
                 continue
+
+            # End of SO energy table
             if "Weights of the five most important spin-orbit-free states" in line:
                 break
+
             if capture_energy:
                 parts = line.split()
-                if len(parts) >= 4 and parts[0].isdigit():
-                    try:
-                        state = int(parts[0])
-                        energy_cm1 = float(parts[3])
-                        energy_data[state] = energy_cm1
-                    except ValueError:
-                        pass
+
+                # skip empty lines
+                if not parts:
+                    continue
+
+                # only lines starting with a state number
+                if not parts[0].isdigit():
+                    continue
+
+                try:
+                    state = int(parts[0])
+                    # Column 3 is cm^-1, based on your file
+                    energy_cm1 = float(parts[3])
+                    energy_data[state] = energy_cm1
+                except (ValueError, IndexError):
+                    continue
+
     return energy_data
+
+
+def detect_degeneracy(energy_data, threshold=0.0):
+    """Return True if SO states 1 and 2 are degenerate within threshold (cm-1)."""
+    if 1 in energy_data and 2 in energy_data:
+        return abs(energy_data[2] - energy_data[1]) <= threshold
+    return False
+
 
 def extract_transition_data_from_output(output_file):
     transitions = []
@@ -44,20 +66,27 @@ def extract_transition_data_from_output(output_file):
                         ay = float(parts[4])
                         az = float(parts[5])
                         total_a = float(parts[6])
-                        transitions.append((state_from, state_to, osc_strength, ax, ay, az, total_a))
+                        transitions.append(
+                            (state_from, state_to, osc_strength, ax, ay, az, total_a)
+                        )
                     except ValueError:
                         pass
     return transitions
 
-def map_transitions(energy_data, transitions, output_file, trunc=False):
+
+def map_transitions(energy_data, transitions, output_file, trunc=False, trunc_states=None):
     with open(output_file, 'w') as file:
         file.write(
-            "State From   State To   Energy Difference (cm⁻¹)   "
-            "Osc. Strength       Ax (sec⁻¹)        Ay (sec⁻¹)        "
-            "Az (sec⁻¹)        Total A (sec⁻¹)\n"
+            "State From   State To   Energy Difference (cm-1)   "
+            "Osc. Strength       Ax (sec-1)        Ay (sec-1)        "
+            "Az (sec-1)        Total A (sec-1)\n"
         )
-        # If truncating, only keep transitions where state_from == 1
-        to_process = transitions if not trunc else [t for t in transitions if t[0] == 1]
+
+        if not trunc:
+            to_process = transitions
+        else:
+            to_process = [t for t in transitions if t[0] in trunc_states]
+
         for state_from, state_to, osc_strength, ax, ay, az, total_a in to_process:
             if state_from in energy_data and state_to in energy_data:
                 energy_diff = energy_data[state_to] - energy_data[state_from]
@@ -71,6 +100,7 @@ def map_transitions(energy_data, transitions, output_file, trunc=False):
                     f"{total_a:<18.8E}\n"
                 )
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extract energy & transition data from OpenMolcas output; "
@@ -79,7 +109,8 @@ def main():
     parser.add_argument("output_file", help="Path to the OpenMolcas output file")
     parser.add_argument(
         "--trunc", action="store_true",
-        help="Also write a truncated file with only From-state=1 transitions"
+        help="Write truncated file with transitions from state 1, "
+             "or states 1 and 2 if degenerate"
     )
     args = parser.parse_args()
 
@@ -90,13 +121,24 @@ def main():
     energy_data = extract_energy_data_from_output(args.output_file)
     transitions = extract_transition_data_from_output(args.output_file)
 
+    # Full mapping
     map_transitions(energy_data, transitions, full_out, trunc=False)
     print(f"Full mapped transitions saved to {full_out}")
 
-    # truncated table of just transitions from the GS
+    # Truncated mapping
     if args.trunc:
-        map_transitions(energy_data, transitions, trunc_out, trunc=True)
-        print(f"Truncated (From=1) transitions saved to {trunc_out}")
+        degenerate = detect_degeneracy(energy_data, threshold=0.0)
+
+        if degenerate:
+            trunc_states = [1, 2]
+            print("Degeneracy detected: including transitions from states 1 AND 2.")
+        else:
+            trunc_states = [1]
+
+        map_transitions(energy_data, transitions, trunc_out, trunc=True, trunc_states=trunc_states)
+        print(f"Truncated transitions saved to {trunc_out}")
+
 
 if __name__ == "__main__":
     main()
+
