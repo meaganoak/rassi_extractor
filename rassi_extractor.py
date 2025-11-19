@@ -37,6 +37,14 @@ def extract_energy_data_from_output(output_file):
 
     return energy_data
 
+def convert_energy(value_eV, unit="eV"):
+    if unit == "eV":
+        return value_eV
+    elif unit == "cm-1":
+        return value_eV * 8065.54429
+    else:
+        raise ValueError(f"Unsupported energy unit: {unit}")
+
 
 def detect_degeneracy(energy_data, threshold=0.0):
     """Return True if SO states 1 and 2 are degenerate within threshold (cm-1)."""
@@ -74,10 +82,10 @@ def extract_transition_data_from_output(output_file):
     return transitions
 
 
-def map_transitions(energy_data, transitions, output_file, trunc=False, trunc_states=None):
+def map_transitions(energy_data, transitions, output_file, trunc=False, trunc_states=None, unit="eV"):
     with open(output_file, 'w') as file:
         file.write(
-            "State From   State To   Energy Difference (cm-1)   "
+            "State From   State To   Energy Difference {(unit})   "
             "Osc. Strength       Ax (sec-1)        Ay (sec-1)        "
             "Az (sec-1)        Total A (sec-1)\n"
         )
@@ -89,7 +97,8 @@ def map_transitions(energy_data, transitions, output_file, trunc=False, trunc_st
 
         for state_from, state_to, osc_strength, ax, ay, az, total_a in to_process:
             if state_from in energy_data and state_to in energy_data:
-                energy_diff = energy_data[state_to] - energy_data[state_from]
+                energy_diff_eV = energy_data[state_to] - energy_data[state_from]
+                energy_diff = convert_energy(energy_diff_eV, unit)
                 file.write(
                     f"{state_from:<12}{state_to:<12}"
                     f"{energy_diff:<28.2f}"
@@ -111,6 +120,10 @@ def main():
         "--trunc", action="store_true",
         help="Write truncated file with transitions from state 1, "
              "or states 1 and 2 if degenerate"
+    )
+    parser.add_argument(
+    "--units", choices=["eV", "cm-1"], default="eV",
+    help="Units for energy output tables: eV (default), or cm-1"
     )
     args = parser.parse_args()
 
@@ -135,7 +148,7 @@ def main():
         else:
             trunc_states = [1]
 
-        map_transitions(energy_data, transitions, trunc_out, trunc=True, trunc_states=trunc_states)
+        map_transitions(energy_data, transitions, trunc_out, trunc=True, trunc_states=trunc_states, unit=args.units)
         print(f"Truncated transitions saved to {trunc_out}")
 
 
