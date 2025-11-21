@@ -29,9 +29,9 @@ def extract_energy_data_from_output(output_file):
 
                 try:
                     state = int(parts[0])
-                    # Column 3 is cm^-1, based on your file
-                    energy_cm1 = float(parts[3])
-                    energy_data[state] = energy_cm1
+                    # Column 2 is eV, based on your file
+                    energy_eV = float(parts[2])
+                    energy_data[state] = energy_eV
                 except (ValueError, IndexError):
                     continue
 
@@ -85,7 +85,7 @@ def extract_transition_data_from_output(output_file):
 def map_transitions(energy_data, transitions, output_file, trunc=False, trunc_states=None, unit="eV"):
     with open(output_file, 'w') as file:
         file.write(
-            "State From   State To   Energy Difference {(unit})   "
+            f"State From   State To   Energy Difference ({unit})   "
             "Osc. Strength       Ax (sec-1)        Ay (sec-1)        "
             "Az (sec-1)        Total A (sec-1)\n"
         )
@@ -135,7 +135,7 @@ def main():
     transitions = extract_transition_data_from_output(args.output_file)
 
     # Full mapping
-    map_transitions(energy_data, transitions, full_out, trunc=False)
+    map_transitions(energy_data, transitions, full_out, trunc=False, unit=args.units)
     print(f"Full mapped transitions saved to {full_out}")
 
     # Truncated mapping
